@@ -32,6 +32,7 @@ class nrpe (
   $command_timeout                  = '60',
   $connection_timeout               = '300',
   $allow_weak_random_seed           = '0',
+  $disable_ssl                      = false,
   $include_dir                      = 'USE_DEFAULTS',
   $service_ensure                   = 'running',
   $service_name                     = 'USE_DEFAULTS',
@@ -110,6 +111,7 @@ class nrpe (
           $default_nrpe_user                        = 'nagios'
           $default_nrpe_group                       = 'nagios'
           $default_include_dir                      = '/etc/nagios/nrpe.d'
+          $default_options_file                     = '/etc/default/nagios-nrpe-server'
         }
         'Ubuntu': {
           $default_service_name                     = 'nagios-nrpe-server'
@@ -128,6 +130,7 @@ class nrpe (
           $default_nrpe_user                        = 'nagios'
           $default_nrpe_group                       = 'nagios'
           $default_include_dir                      = '/etc/nagios/nrpe.d'
+          $default_options_file                     = '/etc/default/nagios-nrpe-server'
         }
         default: {
           fail("nrpe supports lsbdistid's Debian, Raspbian and Ubuntu in the osfamily Debian. Detected lsbdistid is <${::lsbdistid}>.")
@@ -295,6 +298,7 @@ class nrpe (
   validate_absolute_path($include_dir_real)
   validate_re($service_ensure, '^(running|stopped)$',
     "nrpe::service_ensure must be \'running\' or \'stopped\'. Detected value is <${service_ensure}>.")
+  validate_bool($disable_ssl)
 
   if $nrpe_package_provider != undef {
     validate_string($nrpe_package_provider)
@@ -336,6 +340,19 @@ class nrpe (
     recurse => true,
     require => Package[$nrpe_package_real],
     notify  => Service['nrpe_service'],
+  }
+
+  if ($default_options_file) {
+    $_ensure_ssl = $disable_ssl ? {
+      false   => 'absent',
+      default => 'present'
+    }
+    file_line {'configure ssl':
+      ensure => $_ensure_ssl,
+      path   => $default_options_file,
+      line   => 'DAEMON_OPTS="--no-ssl"',
+      notify => Service['nrpe_service'],
+    }
   }
 
   service { 'nrpe_service':
