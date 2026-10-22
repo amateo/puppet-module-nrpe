@@ -4,11 +4,11 @@
 #
 class nrpe (
   $nrpe_package                     = 'USE_DEFAULTS',
-  $nrpe_package_ensure              = 'present',
+  String $nrpe_package_ensure       = 'present',
   $nrpe_package_adminfile           = 'USE_DEFAULTS',
   $nrpe_package_source              = 'USE_DEFAULTS',
   $nagios_plugins_package           = 'USE_DEFAULTS',
-  $nagios_plugins_package_ensure    = 'present',
+  String $nagios_plugins_package_ensure = 'present',
   $nagios_plugins_package_adminfile = 'USE_DEFAULTS',
   $nagios_plugins_package_source    = 'USE_DEFAULTS',
   $nrpe_config                      = 'USE_DEFAULTS',
@@ -44,7 +44,7 @@ class nrpe (
 ) {
 
   # OS platform defaults
-  case $::osfamily {
+  case $facts['os']['family'] {
     'RedHat': {
       $default_service_name                     = 'nrpe'
       $default_nrpe_package                     = 'nrpe'
@@ -96,7 +96,7 @@ class nrpe (
       $default_include_dir                      = '/usr/local/nagios/etc/nrpe.d'
     }
     'Debian': {
-      case $::lsbdistid {
+      case $facts['os']['name'] {
         'Debian', 'Raspbian': {
           $default_service_name                     = 'nagios-nrpe-server'
           $default_nrpe_package                     = 'nagios-nrpe-server'
@@ -133,7 +133,7 @@ class nrpe (
           $default_options_file                     = '/etc/default/nagios-nrpe-server'
         }
         default: {
-          fail("nrpe supports lsbdistid's Debian, Raspbian and Ubuntu in the osfamily Debian. Detected lsbdistid is <${::lsbdistid}>.")
+          fail("nrpe supports lsbdistid's Debian, Raspbian and Ubuntu in the osfamily Debian. Detected lsbdistid is <${facts['os']['name']}>.")
         }
       }
     }
@@ -155,11 +155,9 @@ class nrpe (
     $nrpe_package_real = $nrpe_package
   }
 
-  if !is_string($nrpe_package_real) and !is_array($nrpe_package_real) {
+  if !($nrpe_package_real =~ String) and !($nrpe_package_real =~ Array) {
     fail('nrpe::nrpe_package must be a string or an array.')
   }
-
-  validate_string($nrpe_package_ensure)
 
   if $nrpe_package_adminfile == 'USE_DEFAULTS' {
     $nrpe_package_adminfile_real = $default_nrpe_package_adminfile
@@ -179,11 +177,9 @@ class nrpe (
     $nagios_plugins_package_real = $nagios_plugins_package
   }
 
-  if !is_string($nagios_plugins_package_real) and !is_array($nagios_plugins_package_real) {
+  if !($nagios_plugins_package_real =~ String) and !($nagios_plugins_package_real =~ Array) {
     fail('nrpe::nagios_plugins_package must be a string or an array.')
   }
-
-  validate_string($nagios_plugins_package_ensure)
 
   if $nagios_plugins_package_adminfile == 'USE_DEFAULTS' {
     $nagios_plugins_package_adminfile_real = $default_nagios_plugins_package_adminfile
@@ -234,74 +230,83 @@ class nrpe (
   }
 
   # Convert types
-  if is_string($server_address_enable) {
+  if $server_address_enable =~ String {
     $server_address_enable_bool = str2bool($server_address_enable)
   } else {
     $server_address_enable_bool = $server_address_enable
   }
 
-  if is_string($command_prefix_enable) {
+  if ($command_prefix_enable =~ String) {
     $command_prefix_enable_bool = str2bool($command_prefix_enable)
   } else {
     $command_prefix_enable_bool = $command_prefix_enable
   }
 
-  if is_string($service_enable) {
+  if ($service_enable =~ String) {
     $service_enable_bool = str2bool($service_enable)
   } else {
     $service_enable_bool = $service_enable
   }
 
-  if is_string($purge_plugins) {
+  if ($purge_plugins =~ String) {
     $purge_plugins_bool = str2bool($purge_plugins)
   } else {
     $purge_plugins_bool = $purge_plugins
   }
 
-  if is_string($hiera_merge_plugins) {
+  if ($hiera_merge_plugins =~ String) {
     $hiera_merge_plugins_bool = str2bool($hiera_merge_plugins)
   } else {
     $hiera_merge_plugins_bool = $hiera_merge_plugins
   }
 
   # Validate params
-  validate_re($nrpe_config_mode, '^\d{4}$',
-    "nrpe::nrpe_config_mode must be a four digit octal mode. Detected value is <${nrpe_config_mode}>.")
-  validate_absolute_path($nrpe_config_real)
-  validate_absolute_path($libexecdir_real)
+  if $nrpe_config_mode !~ Pattern[/^\d{4}$/] {
+    fail ("nrpe::nrpe_config_mode must be a four digit octal mode. Detected value is <${nrpe_config_mode}>.")
+  }
+  assert_type(Stdlib::Absolutepath, $nrpe_config_real)
+  assert_type(Stdlib::Absolutepath, $libexecdir_real)
   if $pid_file_real != 'absent' {
-    validate_absolute_path($pid_file_real)
+    assert_type(Stdlib::Absolutepath, $pid_file_real)
   }
 
-  if is_string($server_port) == true {
-    validate_re($server_port, '^\d+$',
-      "nrpe::server_port must be a valid port number between 0 and 65535, inclusive. Detected value is <${server_port}>.")
+  if ($server_port =~ String) == true {
+    if $server_port != Pattern[/^\d+$/] {
+      fail("nrpe::server_port must be a valid port number between 0 and 65535, inclusive. Detected value is <${server_port}>.")
+    }
   }
 
   if $server_port + 0 < 0 or $server_port + 0 > 65535 {
     fail("nrpe::server_port must be a valid port number between 0 and 65535, inclusive. Detected value is <${server_port}>.")
   }
-  validate_array($allowed_hosts)
-  validate_re($dont_blame_nrpe, '^[01]{1}$',
-    "nrpe::dont_blame_nrpe must be 0 or 1. Detected value is <${dont_blame_nrpe}>.")
-  validate_re($allow_bash_command_substitution, '^[01]{1}$',
-    "nrpe::allow_bash_command_substitution must be 0 or 1. Detected value is <${allow_bash_command_substitution}>.")
-  validate_absolute_path($command_prefix)
-  validate_re($debug, '^[01]{1}$',
-    "nrpe::debug must be 0 or 1. Detected value is <${debug}>.")
-  validate_re($command_timeout, '^\d+$',
-    "nrpe::command_timeout must be a postive integer. Detected value is <${command_timeout}>.")
-  validate_re($connection_timeout, '^\d+$',
-    "nrpe::connection_timeout must be a postive integer. Detected value is <${connection_timeout}>.")
-  validate_re($allow_weak_random_seed, '^[01]{1}$',
-    "nrpe::allow_weak_random_seed must be 0 or 1. Detected value is <${allow_weak_random_seed}>.")
-  validate_absolute_path($include_dir_real)
-  validate_re($service_ensure, '^(running|stopped)$',
-    "nrpe::service_ensure must be \'running\' or \'stopped\'. Detected value is <${service_ensure}>.")
-  validate_bool($disable_ssl)
+  assert_type(Array, $allowed_hosts)
+  if $dont_blame_nrpe !~ Pattern[/^[01]{1}$/] {
+    fail("nrpe::dont_blame_nrpe must be 0 or 1. Detected value is <${dont_blame_nrpe}>.")
+  }
+  if $allow_bash_command_substitution !~ Pattern[/^[01]{1}$/] {
+    fail("nrpe::allow_bash_command_substitution must be 0 or 1. Detected value is <${allow_bash_command_substitution}>.")
+  }
+  assert_type(Stdlib::Absolutepath, $command_prefix)
+  if $debug !~ Pattern[/^[01]{1}$/] {
+    fail("nrpe::debug must be 0 or 1. Detected value is <${debug}>.")
+  }
+  if $command_timeout !~ Pattern[/^\d+$/] {
+    fail("nrpe::command_timeout must be a postive integer. Detected value is <${command_timeout}>.")
+  }
+  if ($connection_timeout !~ Pattern[/^\d+$/]) {
+    fail("nrpe::connection_timeout must be a postive integer. Detected value is <${connection_timeout}>.")
+  }
+  if $allow_weak_random_seed !~ Pattern[/^[01]{1}$/] {
+    fail("nrpe::allow_weak_random_seed must be 0 or 1. Detected value is <${allow_weak_random_seed}>.")
+  }
+  assert_type(Stdlib::Absolutepath, $include_dir_real)
+  if $service_ensure !~ Pattern[/^(running|stopped)$/] {
+    fail("nrpe::service_ensure must be \'running\' or \'stopped\'. Detected value is <${service_ensure}>.")
+  }
+  assert_type(Boolean, $disable_ssl)
 
   if $nrpe_package_provider != undef {
-    validate_string($nrpe_package_provider)
+    assert_type(String, $nrpe_package_provider)
     Package {
       provider => $nrpe_package_provider,
     }
@@ -368,7 +373,7 @@ class nrpe (
     } else {
       $plugins_real = $plugins
     }
-    validate_hash($plugins_real)
+    assert_type(Hash, $plugins_real)
     create_resources('nrpe::plugin',$plugins_real)
   }
 }
